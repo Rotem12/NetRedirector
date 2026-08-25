@@ -28,6 +28,8 @@ The list displays the local IPv4 address used for the membership or egress opera
 
 Settings are saved under `%APPDATA%\NetRedirector\settings.json` when a redirect is started. Closing the window keeps the app in the tray; use the tray menu's **Exit** command to quit.
 
+The action bar also shows a read-only firewall indicator. It reports `clear` when the active Windows Firewall profile/default or an applicable allow rule covers the redirect, `review` when firewall filtering is enabled but no matching allow rule was found, and `blocked` only for an explicit matching block rule. `review` is deliberately not presented as proof of a block; the live transfer test remains authoritative. NetRedirector never edits firewall policy.
+
 ## Build and test
 
 ```powershell

@@ -15,7 +15,8 @@ internal static class Program
             ("TCP client → UDP datagram", TestTcpClientToUdpAsync),
             ("TCP server → UDP datagram", TestTcpServerToUdpAsync),
             ("UDP datagram → TCP server", TestUdpToTcpServerAsync),
-            ("Multicast on selected interface → UDP", TestMulticastAsync)
+            ("Multicast on selected interface → UDP", TestMulticastAsync),
+            ("Read-only firewall assessment", TestFirewallAssessmentAsync)
         };
 
         var failures = 0;
@@ -145,6 +146,23 @@ internal static class Program
         var received = await ReceiveAsync(receiver, timeoutSeconds: 5);
         AssertPayload(payload, received.Buffer);
         await redirector.StopAsync();
+    }
+
+    private static Task TestFirewallAssessmentAsync()
+    {
+        var status = FirewallAssessment.Check(new RedirectConfig
+        {
+            Source = new EndpointConfig { Protocol = EndpointProtocol.Udp, Host = IPAddress.Loopback.ToString(), Port = 45001 },
+            Target = new EndpointConfig { Protocol = EndpointProtocol.Udp, Host = IPAddress.Loopback.ToString(), Port = 45002 }
+        }, Environment.ProcessPath);
+
+        if (string.IsNullOrWhiteSpace(status.Summary) || string.IsNullOrWhiteSpace(status.Details))
+        {
+            throw new InvalidOperationException("The firewall assessment returned no user-facing status.");
+        }
+
+        Console.WriteLine($"      {status.Summary} — {status.Details}");
+        return Task.CompletedTask;
     }
 
     private static RedirectorService CreateRedirector(

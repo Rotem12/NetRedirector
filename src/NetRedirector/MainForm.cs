@@ -12,6 +12,7 @@ internal sealed class MainForm : Form
     private readonly EndpointEditor _targetEditor;
     private readonly CheckedListBox _interfaceList;
     private readonly Label _statusLabel;
+    private readonly Label _firewallLabel;
     private readonly Label _metricsLabel;
     private readonly TextBox _logTextBox;
     private readonly Button _startButton;
@@ -20,11 +21,14 @@ internal sealed class MainForm : Form
     private readonly ToolStripMenuItem _trayStopItem;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _metricsTimer;
+    private readonly System.Windows.Forms.Timer _firewallTimer;
+    private readonly ToolTip _firewallToolTip;
     private IReadOnlyList<NetworkInterfaceInfo> _interfaces = [];
     private RedirectorService? _redirector;
     private bool _exitRequested;
     private bool _exitInProgress;
     private bool _loadedInitialWindow;
+    private int _firewallCheckInProgress;
 
     private static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -128,9 +132,37 @@ internal sealed class MainForm : Form
             Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
             ForeColor = Color.DarkGreen
         };
-        _statusLabel.Width = actionPanel.ClientSize.Width - _statusLabel.Left - 10;
         actionPanel.Controls.Add(_statusLabel);
-        actionPanel.Resize += (_, _) => _statusLabel.Width = actionPanel.ClientSize.Width - _statusLabel.Left - 10;
+
+        _firewallLabel = new Label
+        {
+            AutoSize = false,
+            Width = 150,
+            Height = 32,
+            Text = "Firewall: checking",
+            TextAlign = ContentAlignment.MiddleRight,
+            Anchor = AnchorStyles.Right | AnchorStyles.Top,
+            ForeColor = SystemColors.GrayText,
+            Cursor = Cursors.Help
+        };
+        actionPanel.Controls.Add(_firewallLabel);
+        _firewallToolTip = new ToolTip
+        {
+            AutoPopDelay = 12000,
+            InitialDelay = 250,
+            ReshowDelay = 100,
+            ShowAlways = true
+        };
+        _firewallToolTip.SetToolTip(_firewallLabel, "Read-only firewall assessment is checking Windows policy.");
+
+        void LayoutActionPanel()
+        {
+            _firewallLabel.Left = Math.Max(_statusLabel.Left + 30, actionPanel.ClientSize.Width - _firewallLabel.Width - 10);
+            _statusLabel.Width = Math.Max(30, _firewallLabel.Left - _statusLabel.Left - 8);
+        }
+
+        actionPanel.Resize += (_, _) => LayoutActionPanel();
+        LayoutActionPanel();
 
         var logGroup = new GroupBox
         {
@@ -197,6 +229,10 @@ internal sealed class MainForm : Form
         _metricsTimer.Tick += (_, _) => UpdateMetrics();
         _metricsTimer.Start();
 
+        _firewallTimer = new System.Windows.Forms.Timer { Interval = 15000 };
+        _firewallTimer.Tick += (_, _) => RefreshFirewallIndicator();
+        _firewallTimer.Start();
+
         Shown += (_, _) =>
         {
             if (!_loadedInitialWindow)
@@ -204,6 +240,8 @@ internal sealed class MainForm : Form
                 _loadedInitialWindow = true;
                 Hide();
             }
+
+            RefreshFirewallIndicator();
         };
         FormClosing += MainForm_FormClosing;
         Resize += (_, _) =>
@@ -217,6 +255,8 @@ internal sealed class MainForm : Form
         FormClosed += (_, _) =>
         {
             _metricsTimer.Stop();
+            _firewallTimer.Stop();
+            _firewallToolTip.Dispose();
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
         };
@@ -226,6 +266,7 @@ internal sealed class MainForm : Form
         _sourceEditor.RefreshSerialPorts();
         _targetEditor.RefreshSerialPorts();
         AppendLog("Ready. The app is minimized to the notification area.", false);
+        RefreshFirewallIndicator();
     }
 
     private async Task StartRedirectAsync()
@@ -250,6 +291,7 @@ internal sealed class MainForm : Form
             await redirector.StartAsync();
             _redirector = redirector;
             SetRunningState(true);
+            RefreshFirewallIndicator(config);
         }
         catch (Exception exception)
         {
@@ -343,6 +385,64 @@ internal sealed class MainForm : Form
     {
         var metrics = _redirector?.Metrics ?? default;
         _metricsLabel.Text = $"{FormatBytes(metrics.BytesForwarded)}  •  {metrics.PacketsForwarded:N0} packets";
+    }
+
+    private async void RefreshFirewallIndicator(RedirectConfig? suppliedConfig = null)
+    {
+        if (IsDisposed || !IsHandleCreated || Interlocked.Exchange(ref _firewallCheckInProgress, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var config = suppliedConfig?.Clone() ?? GetCurrentConfig();
+            var status = await Task.Run(() => FirewallAssessment.Check(config, Environment.ProcessPath));
+            ApplyFirewallStatus(status);
+        }
+        catch (Exception exception)
+        {
+            ApplyFirewallStatus(new FirewallStatus(
+                FirewallStatusKind.Unknown,
+                "Firewall: unknown",
+                $"The firewall indicator could not complete its read-only check: {exception.Message}"));
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _firewallCheckInProgress, 0);
+        }
+    }
+
+    private RedirectConfig GetCurrentConfig() => new()
+    {
+        Source = _sourceEditor.GetConfig(),
+        Target = _targetEditor.GetConfig(),
+        MulticastInterfaces = GetCheckedInterfaces().ToList()
+    };
+
+    private void ApplyFirewallStatus(FirewallStatus status)
+    {
+        if (IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(() => ApplyFirewallStatus(status));
+            return;
+        }
+
+        _firewallLabel.Text = status.Summary;
+        _firewallLabel.ForeColor = status.Kind switch
+        {
+            FirewallStatusKind.Clear => Color.DarkGreen,
+            FirewallStatusKind.ExplicitBlock => Color.Firebrick,
+            FirewallStatusKind.Review => Color.DarkOrange,
+            _ => SystemColors.GrayText
+        };
+        _firewallToolTip.SetToolTip(_firewallLabel, status.Details);
+        _trayIcon.Text = $"NetRedirector — {status.Summary}";
     }
 
     private void RefreshInterfaces()
