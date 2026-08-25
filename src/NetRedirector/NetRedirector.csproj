@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>NetRedirector</AssemblyName>
+    <RootNamespace>NetRedirector</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NetRedirector.Core\NetRedirector.Core.csproj" />
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+  </ItemGroup>
+</Project>
