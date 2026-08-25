@@ -23,12 +23,12 @@ internal sealed class MainForm : Form
     private readonly System.Windows.Forms.Timer _metricsTimer;
     private readonly System.Windows.Forms.Timer _firewallTimer;
     private readonly ToolTip _firewallToolTip;
+    private readonly SemaphoreSlim _firewallCheckLock = new(1, 1);
     private IReadOnlyList<NetworkInterfaceInfo> _interfaces = [];
     private RedirectorService? _redirector;
     private bool _exitRequested;
     private bool _exitInProgress;
     private bool _loadedInitialWindow;
-    private int _firewallCheckInProgress;
 
     private static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -276,9 +276,10 @@ internal sealed class MainForm : Form
             return;
         }
 
+        RedirectConfig? config = null;
         try
         {
-            var config = new RedirectConfig
+            config = new RedirectConfig
             {
                 Source = _sourceEditor.GetConfig(),
                 Target = _targetEditor.GetConfig(),
@@ -291,12 +292,15 @@ internal sealed class MainForm : Form
             await redirector.StartAsync();
             _redirector = redirector;
             SetRunningState(true);
-            RefreshFirewallIndicator(config);
         }
         catch (Exception exception)
         {
             AppendLog(exception.Message, true);
             SetStatus(exception.Message, true);
+        }
+        finally
+        {
+            RefreshFirewallIndicator(config);
         }
     }
 
@@ -305,9 +309,11 @@ internal sealed class MainForm : Form
         var redirector = _redirector;
         if (redirector is null)
         {
+            RefreshFirewallIndicator();
             return;
         }
 
+        var config = GetCurrentConfig();
         _redirector = null;
         SetRunningState(false);
         try
@@ -320,7 +326,14 @@ internal sealed class MainForm : Form
         }
         finally
         {
-            await redirector.DisposeAsync();
+            try
+            {
+                await redirector.DisposeAsync();
+            }
+            finally
+            {
+                RefreshFirewallIndicator(config);
+            }
         }
     }
 
@@ -387,13 +400,19 @@ internal sealed class MainForm : Form
         _metricsLabel.Text = $"{FormatBytes(metrics.BytesForwarded)}  •  {metrics.PacketsForwarded:N0} packets";
     }
 
-    private async void RefreshFirewallIndicator(RedirectConfig? suppliedConfig = null)
+    private void RefreshFirewallIndicator(RedirectConfig? suppliedConfig = null)
     {
-        if (IsDisposed || !IsHandleCreated || Interlocked.Exchange(ref _firewallCheckInProgress, 1) != 0)
+        _ = RefreshFirewallIndicatorAsync(suppliedConfig);
+    }
+
+    private async Task RefreshFirewallIndicatorAsync(RedirectConfig? suppliedConfig)
+    {
+        if (IsDisposed || !IsHandleCreated)
         {
             return;
         }
 
+        await _firewallCheckLock.WaitAsync();
         try
         {
             var config = suppliedConfig?.Clone() ?? GetCurrentConfig();
@@ -409,7 +428,7 @@ internal sealed class MainForm : Form
         }
         finally
         {
-            Interlocked.Exchange(ref _firewallCheckInProgress, 0);
+            _firewallCheckLock.Release();
         }
     }
 
