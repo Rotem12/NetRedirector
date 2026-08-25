@@ -16,7 +16,7 @@ UDP datagrams stay datagrams. TCP and serial data are forwarded as raw byte chun
 
 The interface list is deliberately explicit. Leave it blank to use every active non-loopback IPv4 adapter, or check one or more adapters. A multicast source joins the group separately on every checked adapter. A multicast destination sends each datagram separately through every checked adapter. This supports machines with multiple physical NICs, VPNs, and capture/egress networks.
 
-The list displays the local IPv4 address used for the membership or egress operation. Refresh it after connecting or disconnecting an adapter.
+The list includes an **All (active non-loopback IPv4)** option, enabled by default. Checking a specific adapter automatically disables **All**; checking **All** clears the individual selections. The list displays the local IPv4 address used for the membership or egress operation. Refresh it after connecting or disconnecting an adapter.
 
 ## Use
 

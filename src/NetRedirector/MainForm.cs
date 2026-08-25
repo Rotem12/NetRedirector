@@ -31,6 +31,8 @@ internal sealed class MainForm : Form
     private bool _exitInProgress;
     private bool _loadedInitialWindow;
     private bool _loadingSettings;
+    private bool _updatingInterfaceChecks;
+    private bool _hasPendingInterfaceSelection;
 
     private static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -83,6 +85,7 @@ internal sealed class MainForm : Form
             BorderStyle = BorderStyle.FixedSingle,
             HorizontalScrollbar = true
         };
+        _interfaceList.ItemCheck += InterfaceList_ItemCheck;
         interfaceGroup.Controls.Add(_interfaceList);
 
         var interfaceButtons = new FlowLayoutPanel
@@ -100,7 +103,7 @@ internal sealed class MainForm : Form
 
         var interfaceHint = new Label
         {
-            Text = "Blank = all active non-loopback IPv4 adapters. Select more than one to join/send on each.",
+            Text = "All uses every active non-loopback IPv4 adapter. Select specific adapters to limit multicast/UDP traffic.",
             Dock = DockStyle.Bottom,
             Height = 16,
             AutoEllipsis = true,
@@ -496,13 +499,28 @@ internal sealed class MainForm : Form
 
     private void RefreshInterfaces()
     {
-        var checkedAddresses = GetCheckedInterfaces().ToHashSet(StringComparer.OrdinalIgnoreCase);
-        _interfaces = NetworkInterfaceCatalog.GetIpv4Interfaces();
-        _interfaceList.Items.Clear();
-        foreach (var networkInterface in _interfaces)
+        var hadItems = _interfaceList.Items.Count > 0;
+        var allSelected = hadItems ? IsAllInterfacesChecked() : true;
+        var checkedAddresses = !allSelected
+            ? GetCheckedInterfaces().ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : [];
+
+        _updatingInterfaceChecks = true;
+        try
         {
-            var index = _interfaceList.Items.Add(networkInterface);
-            _interfaceList.SetItemChecked(index, checkedAddresses.Contains(networkInterface.Address));
+            _interfaces = NetworkInterfaceCatalog.GetIpv4Interfaces();
+            _interfaceList.Items.Clear();
+            var allIndex = _interfaceList.Items.Add(AllInterfacesOption.Instance);
+            _interfaceList.SetItemChecked(allIndex, allSelected);
+            foreach (var networkInterface in _interfaces)
+            {
+                var index = _interfaceList.Items.Add(networkInterface);
+                _interfaceList.SetItemChecked(index, !allSelected && checkedAddresses.Contains(networkInterface.Address));
+            }
+        }
+        finally
+        {
+            _updatingInterfaceChecks = false;
         }
 
         ApplyPendingInterfaces();
@@ -510,9 +528,52 @@ internal sealed class MainForm : Form
 
     private IEnumerable<string> GetCheckedInterfaces()
     {
+        if (IsAllInterfacesChecked())
+        {
+            return [];
+        }
+
         return _interfaceList.CheckedItems
             .OfType<NetworkInterfaceInfo>()
             .Select(networkInterface => networkInterface.Address);
+    }
+
+    private bool IsAllInterfacesChecked() =>
+        _interfaceList.Items.Count > 0 &&
+        _interfaceList.Items[0] is AllInterfacesOption &&
+        _interfaceList.GetItemChecked(0);
+
+    private void InterfaceList_ItemCheck(object? sender, ItemCheckEventArgs e)
+    {
+        if (_updatingInterfaceChecks)
+        {
+            return;
+        }
+
+        _updatingInterfaceChecks = true;
+        try
+        {
+            if (e.Index == 0 && e.NewValue == CheckState.Checked)
+            {
+                for (var index = 1; index < _interfaceList.Items.Count; index++)
+                {
+                    _interfaceList.SetItemChecked(index, false);
+                }
+            }
+            else if (e.Index == 0 && e.NewValue == CheckState.Unchecked &&
+                     !_interfaceList.CheckedItems.OfType<NetworkInterfaceInfo>().Any())
+            {
+                BeginInvoke(new Action(EnsureInterfaceSelection));
+            }
+            else if (e.Index > 0 && e.NewValue == CheckState.Checked)
+            {
+                _interfaceList.SetItemChecked(0, false);
+            }
+        }
+        finally
+        {
+            _updatingInterfaceChecks = false;
+        }
     }
 
     private void LoadSettings()
@@ -531,6 +592,7 @@ internal sealed class MainForm : Form
                 _sourceEditor.SetConfig(config.Source);
                 _targetEditor.SetConfig(config.Target);
                 _pendingInterfaces = config.MulticastInterfaces ?? [];
+                _hasPendingInterfaceSelection = true;
                 _autoStartCheckBox.Checked = config.AutoStart;
             }
         }
@@ -562,15 +624,54 @@ internal sealed class MainForm : Form
 
     private void ApplyPendingInterfaces()
     {
-        var pending = _pendingInterfaces.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        for (var index = 0; index < _interfaceList.Items.Count; index++)
+        if (!_hasPendingInterfaceSelection)
         {
-            if (_interfaceList.Items[index] is NetworkInterfaceInfo item)
-            {
-                _interfaceList.SetItemChecked(index, pending.Contains(item.Address));
-            }
+            return;
         }
+
+        var pending = _pendingInterfaces.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var matchedAny = false;
+        _updatingInterfaceChecks = true;
+        try
+        {
+            for (var index = 1; index < _interfaceList.Items.Count; index++)
+            {
+                if (_interfaceList.Items[index] is NetworkInterfaceInfo item)
+                {
+                    var isChecked = pending.Count > 0 && pending.Contains(item.Address);
+                    _interfaceList.SetItemChecked(index, isChecked);
+                    matchedAny |= isChecked;
+                }
+            }
+
+            _interfaceList.SetItemChecked(0, pending.Count == 0 || !matchedAny);
+        }
+        finally
+        {
+            _updatingInterfaceChecks = false;
+        }
+
         _pendingInterfaces.Clear();
+        _hasPendingInterfaceSelection = false;
+    }
+
+    private void EnsureInterfaceSelection()
+    {
+        if (IsDisposed || _updatingInterfaceChecks || IsAllInterfacesChecked() ||
+            _interfaceList.CheckedItems.OfType<NetworkInterfaceInfo>().Any())
+        {
+            return;
+        }
+
+        _updatingInterfaceChecks = true;
+        try
+        {
+            _interfaceList.SetItemChecked(0, true);
+        }
+        finally
+        {
+            _updatingInterfaceChecks = false;
+        }
     }
 
     private void RequestExit()
@@ -648,6 +749,13 @@ internal sealed class MainForm : Form
             return $"{value / 1024d / 1024d:N1} MiB";
         }
         return $"{value / 1024d / 1024d / 1024d:N2} GiB";
+    }
+
+    private sealed class AllInterfacesOption
+    {
+        public static AllInterfacesOption Instance { get; } = new();
+
+        public override string ToString() => "All (active non-loopback IPv4)";
     }
 
     private sealed class EndpointEditor : GroupBox
