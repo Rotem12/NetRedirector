@@ -47,7 +47,7 @@ internal sealed class MainForm : Form
         MinimizeBox = true;
         ShowInTaskbar = false;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(760, 560);
+        ClientSize = new Size(660, 430);
         MinimumSize = Size;
 
         _sourceEditor = new EndpointEditor("Source", isSource: true);
@@ -56,10 +56,10 @@ internal sealed class MainForm : Form
         var endpointLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 178,
+            Height = 154,
             ColumnCount = 2,
             RowCount = 1,
-            Padding = new Padding(8, 6, 8, 0)
+            Padding = new Padding(6, 4, 6, 0)
         };
         endpointLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         endpointLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -70,9 +70,9 @@ internal sealed class MainForm : Form
         {
             Text = "Multicast / UDP interfaces",
             Dock = DockStyle.Top,
-            Height = 126,
-            Padding = new Padding(8, 20, 8, 8),
-            Margin = new Padding(8, 6, 8, 0)
+            Height = 104,
+            Padding = new Padding(6, 18, 6, 6),
+            Margin = new Padding(6, 4, 6, 0)
         };
 
         _interfaceList = new CheckedListBox
@@ -88,12 +88,12 @@ internal sealed class MainForm : Form
         var interfaceButtons = new FlowLayoutPanel
         {
             Dock = DockStyle.Right,
-            Width = 80,
+            Width = 72,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
-            Padding = new Padding(6, 0, 0, 0)
+            Padding = new Padding(4, 0, 0, 0)
         };
-        var refreshInterfacesButton = CreateButton("Refresh", 68, 28);
+        var refreshInterfacesButton = CreateButton("Refresh", 62, 26);
         refreshInterfacesButton.Click += (_, _) => RefreshInterfaces();
         interfaceButtons.Controls.Add(refreshInterfacesButton);
         interfaceGroup.Controls.Add(interfaceButtons);
@@ -102,7 +102,7 @@ internal sealed class MainForm : Form
         {
             Text = "Blank = all active non-loopback IPv4 adapters. Select more than one to join/send on each.",
             Dock = DockStyle.Bottom,
-            Height = 18,
+            Height = 16,
             AutoEllipsis = true,
             ForeColor = SystemColors.GrayText
         };
@@ -111,13 +111,13 @@ internal sealed class MainForm : Form
         var actionPanel = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 54,
-            Padding = new Padding(10, 8, 10, 4)
+            Height = 46,
+            Padding = new Padding(8, 6, 8, 2)
         };
 
-        _startButton = CreateButton("Start redirect", 116, 32);
+        _startButton = CreateButton("Start redirect", 110, 30);
         _startButton.Click += async (_, _) => await StartRedirectAsync();
-        _stopButton = CreateButton("Stop", 80, 32);
+        _stopButton = CreateButton("Stop", 72, 30);
         _stopButton.Enabled = false;
         _stopButton.Click += async (_, _) => await StopRedirectAsync();
         actionPanel.Controls.Add(_startButton);
@@ -129,7 +129,7 @@ internal sealed class MainForm : Form
             AutoSize = true,
             Text = "Auto-run",
             Checked = true,
-            Location = new Point(_stopButton.Right + 14, 14),
+            Location = new Point(_stopButton.Right + 12, 11),
             Anchor = AnchorStyles.Left | AnchorStyles.Top,
             Cursor = Cursors.Hand
         };
@@ -141,8 +141,8 @@ internal sealed class MainForm : Form
             AutoSize = false,
             Text = "Ready — running in the tray",
             TextAlign = ContentAlignment.MiddleLeft,
-            Location = new Point(_autoStartCheckBox.Right + 14, 8),
-            Height = 32,
+            Location = new Point(_autoStartCheckBox.Right + 12, 6),
+            Height = 30,
             Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
             ForeColor = Color.DarkGreen
         };
@@ -151,8 +151,8 @@ internal sealed class MainForm : Form
         _firewallLabel = new Label
         {
             AutoSize = false,
-            Width = 150,
-            Height = 32,
+            Width = 142,
+            Height = 30,
             Text = "Firewall: checking",
             TextAlign = ContentAlignment.MiddleRight,
             Anchor = AnchorStyles.Right | AnchorStyles.Top,
@@ -182,8 +182,8 @@ internal sealed class MainForm : Form
         {
             Text = "Activity",
             Dock = DockStyle.Fill,
-            Padding = new Padding(8, 20, 8, 8),
-            Margin = new Padding(8, 0, 8, 8)
+            Padding = new Padding(6, 18, 6, 6),
+            Margin = new Padding(6, 0, 6, 6)
         };
         _logTextBox = new TextBox
         {
@@ -200,7 +200,7 @@ internal sealed class MainForm : Form
         _metricsLabel = new Label
         {
             Dock = DockStyle.Bottom,
-            Height = 18,
+            Height = 16,
             Text = "0 B  •  0 packets",
             ForeColor = SystemColors.GrayText,
             TextAlign = ContentAlignment.MiddleRight
@@ -669,7 +669,7 @@ internal sealed class MainForm : Form
             _isSource = isSource;
             Text = title;
             Dock = DockStyle.Fill;
-            Padding = new Padding(8, 20, 8, 6);
+            Padding = new Padding(6, 18, 6, 4);
 
             var layout = new TableLayoutPanel
             {
@@ -683,7 +683,7 @@ internal sealed class MainForm : Form
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             for (var row = 0; row < 5; row++)
             {
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
+                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 23));
             }
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
@@ -699,7 +699,7 @@ internal sealed class MainForm : Form
             layout.Controls.Add(_hostTextBox, 1, 1);
 
             _portLabel = new Label { Text = "Port", AutoSize = true, Anchor = AnchorStyles.Left, TextAlign = ContentAlignment.MiddleLeft };
-            _portNumeric = new NumericUpDown { Minimum = 1, Maximum = 65535, Value = isSource ? 5000 : 5001, Dock = DockStyle.Left, Width = 90, ThousandsSeparator = false };
+            _portNumeric = new NumericUpDown { Minimum = 1, Maximum = 65535, Value = isSource ? 5000 : 5001, Dock = DockStyle.Left, Width = 86, ThousandsSeparator = false };
             layout.Controls.Add(_portLabel, 0, 2);
             layout.Controls.Add(_portNumeric, 1, 2);
 
@@ -709,7 +709,7 @@ internal sealed class MainForm : Form
             layout.Controls.Add(_serialCombo, 1, 3);
 
             _baudLabel = new Label { Text = "Baud", AutoSize = true, Anchor = AnchorStyles.Left, TextAlign = ContentAlignment.MiddleLeft };
-            _baudCombo = new ComboBox { Dock = DockStyle.Left, Width = 105, DropDownStyle = ComboBoxStyle.DropDownList };
+            _baudCombo = new ComboBox { Dock = DockStyle.Left, Width = 96, DropDownStyle = ComboBoxStyle.DropDownList };
             _baudCombo.Items.AddRange(["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"]);
             _baudCombo.SelectedItem = "115200";
             layout.Controls.Add(_baudLabel, 0, 4);
