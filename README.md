@@ -20,13 +20,15 @@ The list displays the local IPv4 address used for the membership or egress opera
 
 ## Use
 
-1. Run `NetRedirector.exe`; it starts in the notification area.
+1. Run `NetRedirector.exe`; it starts in the notification area and auto-starts the saved redirect by default.
 2. Left-click the tray icon to open the compact settings window.
 3. Select the source and target protocol, address/port, or serial port.
 4. For multicast, enter the group such as `239.10.10.10` and choose the required interfaces.
 5. Click **Start redirect**. The activity pane shows endpoint state and byte/packet counters.
 
-Settings are saved under `%APPDATA%\NetRedirector\settings.json` when a redirect is started. Closing the window keeps the app in the tray; use the tray menu's **Exit** command to quit.
+The **Auto-run** checkbox controls whether the saved redirect starts on the next launch. It is enabled by default. Endpoint values, interface selections, and this checkbox are saved to `%APPDATA%\NetRedirector\settings.json` when the redirect starts/stops or the window is closed.
+
+Closing the window keeps the app in the tray; use the tray menu's **Exit** command to quit.
 
 The action bar also shows a read-only firewall indicator. It reports `clear` when the active Windows Firewall profile/default or an applicable allow rule covers the redirect, `review` when firewall filtering is enabled but no matching allow rule was found, and `blocked` only for an explicit matching block rule. `review` is deliberately not presented as proof of a block; the live transfer test remains authoritative. NetRedirector never edits firewall policy.
 

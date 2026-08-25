@@ -17,6 +17,7 @@ internal sealed class MainForm : Form
     private readonly TextBox _logTextBox;
     private readonly Button _startButton;
     private readonly Button _stopButton;
+    private readonly CheckBox _autoStartCheckBox;
     private readonly ToolStripMenuItem _trayStartItem;
     private readonly ToolStripMenuItem _trayStopItem;
     private readonly NotifyIcon _trayIcon;
@@ -29,6 +30,7 @@ internal sealed class MainForm : Form
     private bool _exitRequested;
     private bool _exitInProgress;
     private bool _loadedInitialWindow;
+    private bool _loadingSettings;
 
     private static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -122,12 +124,24 @@ internal sealed class MainForm : Form
         actionPanel.Controls.Add(_stopButton);
         _stopButton.Left = _startButton.Right + 8;
 
+        _autoStartCheckBox = new CheckBox
+        {
+            AutoSize = true,
+            Text = "Auto-run",
+            Checked = true,
+            Location = new Point(_stopButton.Right + 14, 14),
+            Anchor = AnchorStyles.Left | AnchorStyles.Top,
+            Cursor = Cursors.Hand
+        };
+        _autoStartCheckBox.CheckedChanged += (_, _) => AutoStartCheckBox_CheckedChanged();
+        actionPanel.Controls.Add(_autoStartCheckBox);
+
         _statusLabel = new Label
         {
             AutoSize = false,
             Text = "Ready — running in the tray",
             TextAlign = ContentAlignment.MiddleLeft,
-            Location = new Point(_stopButton.Right + 18, 8),
+            Location = new Point(_autoStartCheckBox.Right + 14, 8),
             Height = 32,
             Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
             ForeColor = Color.DarkGreen
@@ -239,6 +253,11 @@ internal sealed class MainForm : Form
             {
                 _loadedInitialWindow = true;
                 Hide();
+
+                if (_autoStartCheckBox.Checked)
+                {
+                    BeginInvoke(new Action(() => _ = StartRedirectAsync()));
+                }
             }
 
             RefreshFirewallIndicator();
@@ -283,7 +302,8 @@ internal sealed class MainForm : Form
             {
                 Source = _sourceEditor.GetConfig(),
                 Target = _targetEditor.GetConfig(),
-                MulticastInterfaces = GetCheckedInterfaces().ToList()
+                MulticastInterfaces = GetCheckedInterfaces().ToList(),
+                AutoStart = _autoStartCheckBox.Checked
             };
             SaveSettings(config);
 
@@ -314,6 +334,7 @@ internal sealed class MainForm : Form
         }
 
         var config = GetCurrentConfig();
+        SaveSettings(config);
         _redirector = null;
         SetRunningState(false);
         try
@@ -436,8 +457,17 @@ internal sealed class MainForm : Form
     {
         Source = _sourceEditor.GetConfig(),
         Target = _targetEditor.GetConfig(),
-        MulticastInterfaces = GetCheckedInterfaces().ToList()
+        MulticastInterfaces = GetCheckedInterfaces().ToList(),
+        AutoStart = _autoStartCheckBox.Checked
     };
+
+    private void AutoStartCheckBox_CheckedChanged()
+    {
+        if (!_loadingSettings)
+        {
+            SaveSettings(GetCurrentConfig());
+        }
+    }
 
     private void ApplyFirewallStatus(FirewallStatus status)
     {
@@ -487,6 +517,7 @@ internal sealed class MainForm : Form
 
     private void LoadSettings()
     {
+        _loadingSettings = true;
         try
         {
             if (!File.Exists(SettingsPath))
@@ -500,11 +531,16 @@ internal sealed class MainForm : Form
                 _sourceEditor.SetConfig(config.Source);
                 _targetEditor.SetConfig(config.Target);
                 _pendingInterfaces = config.MulticastInterfaces ?? [];
+                _autoStartCheckBox.Checked = config.AutoStart;
             }
         }
         catch (Exception exception)
         {
             AppendLog($"Could not load saved settings: {exception.Message}", true);
+        }
+        finally
+        {
+            _loadingSettings = false;
         }
     }
 
@@ -576,6 +612,8 @@ internal sealed class MainForm : Form
 
     private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
     {
+        SaveSettings(GetCurrentConfig());
+
         if (_exitRequested)
         {
             return;

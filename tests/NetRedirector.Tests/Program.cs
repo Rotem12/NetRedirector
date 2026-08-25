@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using NetRedirector.Core;
 
 namespace NetRedirector.Tests;
@@ -16,7 +17,8 @@ internal static class Program
             ("TCP server → UDP datagram", TestTcpServerToUdpAsync),
             ("UDP datagram → TCP server", TestUdpToTcpServerAsync),
             ("Multicast on selected interface → UDP", TestMulticastAsync),
-            ("Read-only firewall assessment", TestFirewallAssessmentAsync)
+            ("Read-only firewall assessment", TestFirewallAssessmentAsync),
+            ("Saved settings preserve auto-run", TestSavedSettingsAsync)
         };
 
         var failures = 0;
@@ -162,6 +164,23 @@ internal static class Program
         }
 
         Console.WriteLine($"      {status.Summary} — {status.Details}");
+        return Task.CompletedTask;
+    }
+
+    private static Task TestSavedSettingsAsync()
+    {
+        if (!new RedirectConfig().AutoStart)
+        {
+            throw new InvalidOperationException("Auto-run is not enabled by default.");
+        }
+
+        var json = JsonSerializer.Serialize(new RedirectConfig { AutoStart = false });
+        var loaded = JsonSerializer.Deserialize<RedirectConfig>(json);
+        if (loaded is null || loaded.AutoStart)
+        {
+            throw new InvalidOperationException("The saved auto-run setting did not round-trip.");
+        }
+
         return Task.CompletedTask;
     }
 

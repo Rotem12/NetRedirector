@@ -58,12 +58,16 @@ public sealed class RedirectConfig
 
     public int BufferSize { get; set; } = 65535;
 
+    // Start the saved redirect automatically when the tray app launches.
+    public bool AutoStart { get; set; } = true;
+
     public RedirectConfig Clone() => new()
     {
         Source = Source.Clone(),
         Target = Target.Clone(),
         MulticastInterfaces = [.. MulticastInterfaces],
-        BufferSize = BufferSize
+        BufferSize = BufferSize,
+        AutoStart = AutoStart
     };
 }
 
